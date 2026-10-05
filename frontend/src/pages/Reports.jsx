@@ -5,10 +5,8 @@ import { useLanguage } from "../context/LanguageContext";
 /**
  * Reports page
  *  - Top chip grid switches between Donation / Inventory / Activity / Festival / Financial
- *  - "Preview" shows a chart (bar or pie, toggle) for the current filters — nothing is saved
- *  - "Generate Report" shows the same chart, then asks the admin to pick Document or Excel Sheet
- *  - Picking a format builds the file client-side and downloads it, and adds a row to
- *    "Recently Generated" — whose own Download buttons re-download that exact report
+ *  - Provides 3 Chart Types: Bar Chart, Pie Chart, and Scatter Chart
+ *  - Includes explicit X-Axis and Y-Axis labels, grid lines, tick marks, legends, and descriptions
  */
 
 const REPORT_TYPES = [
@@ -17,6 +15,10 @@ const REPORT_TYPES = [
     label: "Donation",
     unit: "₹",
     filterLabel: "Purpose",
+    xAxisLabel: "Donation Purpose Category (Annadhanam, Renovation, etc.)",
+    yAxisLabel: "Total Amount Collected (in ₹ INR)",
+    chartTitle: "Donation Collection vs. Donation Purpose",
+    chartDescription: "This chart illustrates the total monetary donations (₹) received, categorized by temple purpose.",
     filterOptions: [
       "All Purposes",
       "Annadhanam",
@@ -34,8 +36,12 @@ const REPORT_TYPES = [
   {
     key: "Inventory",
     label: "Inventory",
-    unit: "",
+    unit: "Units",
     filterLabel: "Category",
+    xAxisLabel: "Inventory Category (Pooja Items, Groceries, etc.)",
+    yAxisLabel: "Total Stock Quantity (in Units)",
+    chartTitle: "Stock Quantity vs. Inventory Category",
+    chartDescription: "This chart displays the physical stock count of essential temple items available in store.",
     filterOptions: [
       "All Categories",
       "Pooja Items",
@@ -53,8 +59,12 @@ const REPORT_TYPES = [
   {
     key: "Activity",
     label: "Activity",
-    unit: "",
+    unit: "Rites",
     filterLabel: "Activity Type",
+    xAxisLabel: "Ritual & Service Type (Abhishekam, Homam, etc.)",
+    yAxisLabel: "Number of Rituals Performed",
+    chartTitle: "Ritual Counts vs. Activity Type",
+    chartDescription: "This chart shows the volume of religious rites and sacred activities conducted by temple priests.",
     filterOptions: [
       "All Activities",
       "Abhishekam",
@@ -74,6 +84,10 @@ const REPORT_TYPES = [
     label: "Festival",
     unit: "₹",
     filterLabel: "Festival",
+    xAxisLabel: "Festival Utsavam (Skanda Sashti, Thaipusam, etc.)",
+    yAxisLabel: "Festival Budget & Revenue (in ₹ INR)",
+    chartTitle: "Devotee Contributions vs. Festival Utsavam",
+    chartDescription: "This chart compares total funds raised and allocated for major temple festivals and utsavams.",
     filterOptions: [
       "All Festivals",
       "Skanda Sashti",
@@ -91,6 +105,10 @@ const REPORT_TYPES = [
     label: "Financial",
     unit: "₹",
     filterLabel: "Account Head",
+    xAxisLabel: "Financial Account Head (Income, Expense, etc.)",
+    yAxisLabel: "Financial Amount (in ₹ INR)",
+    chartTitle: "Devasthanam Treasury vs. Account Head",
+    chartDescription: "This chart outlines the financial balance of income, operational expenses, donations, and maintenance.",
     filterOptions: [
       "All Accounts",
       "Income",
@@ -108,11 +126,11 @@ const REPORT_TYPES = [
 ];
 
 const PIE_COLORS = [
-  "var(--sindoor)",
-  "var(--gold)",
-  "var(--teal)",
+  "#9a2b25",
+  "#c08829",
+  "#14544b",
   "#7a4fb5",
-  "#3f7fbf",
+  "#2563eb",
 ];
 
 const INITIAL_RECENT = [
@@ -171,6 +189,8 @@ function buildCSV(type, filters, chartData) {
     [`${type.label} Report`],
     ["Period", `${filters.from} to ${filters.to}`],
     [type.filterLabel, filters.filterValue],
+    ["X-Axis Label", type.xAxisLabel],
+    ["Y-Axis Label", type.yAxisLabel],
     [],
     [type.filterLabel, type.unit ? `Value (${type.unit})` : "Value"],
     ...chartData.map((d) => [d.label, d.value]),
@@ -182,12 +202,13 @@ function buildDocHTML(type, filters, chartData) {
   const rowsHtml = chartData
     .map(
       (d) =>
-        `<tr><td style="padding:6px 10px;border:1px solid #ccc;">${d.label}</td><td style="padding:6px 10px;border:1px solid #ccc;">${type.unit}${d.value.toLocaleString("en-IN")}</td></tr>`,
+        `<tr><td style="padding:6px 10px;border:1px solid #ccc;">${d.label}</td><td style="padding:6px 10px;border:1px solid #ccc;">${type.unit === "₹" ? "₹" : ""}${d.value.toLocaleString("en-IN")} ${type.unit !== "₹" ? type.unit : ""}</td></tr>`,
     )
     .join("");
   return `<html><head><meta charset="utf-8"></head><body style="font-family:Arial, sans-serif;">
     <h2>${type.label} Report</h2>
     <p><b>Period:</b> ${filters.from} to ${filters.to}<br/><b>${type.filterLabel}:</b> ${filters.filterValue}</p>
+    <p><b>X-Axis:</b> ${type.xAxisLabel}<br/><b>Y-Axis:</b> ${type.yAxisLabel}</p>
     <table style="border-collapse:collapse;">
       <tr><th style="padding:6px 10px;border:1px solid #ccc;text-align:left;">${type.filterLabel}</th><th style="padding:6px 10px;border:1px solid #ccc;text-align:left;">Value</th></tr>
       ${rowsHtml}
@@ -224,117 +245,167 @@ function downloadReport(type, filters, chartData, format) {
   }
 }
 
-function BarChart({ data, unit }) {
-  const max = Math.max(...data.map((d) => d.value)) || 1;
-  const width = 560,
-    chartHeight = 160,
-    gap = 18;
-  const barWidth = (width - gap * (data.length + 1)) / data.length;
-  return (
-    <svg viewBox={`0 0 ${width} 220`} style={{ width: "100%", height: "auto" }}>
-      {data.map((d, i) => {
-        const barHeight = (d.value / max) * chartHeight;
-        const x = gap + i * (barWidth + gap);
-        const y = chartHeight - barHeight + 20;
-        return (
-          <g key={d.label}>
-            <rect
-              x={x}
-              y={y}
-              width={barWidth}
-              height={barHeight}
-              rx="6"
-              fill="var(--sindoor)"
-            />
-            <text
-              x={x + barWidth / 2}
-              y={y - 6}
-              textAnchor="middle"
-              fontSize="10"
-              fontWeight="600"
-              fill="var(--ink)"
-            >
-              {unit}
-              {d.value.toLocaleString("en-IN")}
-            </text>
-            <text
-              x={x + barWidth / 2}
-              y={chartHeight + 38}
-              textAnchor="middle"
-              fontSize="10"
-              fill="var(--ink-soft)"
-            >
-              {d.label}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
+// -------------------------------------------------------------
+// 1. Enhanced Bar Chart (with X-Axis, Y-Axis, Ticks, Grid Lines)
+// -------------------------------------------------------------
+function BarChart({ data, unit, xAxisLabel, yAxisLabel, chartTitle, chartDescription }) {
+  const rawMax = Math.max(...data.map((d) => d.value)) || 100;
+  // Nice round max ceiling
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawMax)));
+  const max = Math.ceil(rawMax / magnitude) * magnitude || rawMax;
 
-function PieChart({ data }) {
-  const total = data.reduce((s, d) => s + d.value, 0) || 1;
-  const radius = 90,
-    cx = 110,
-    cy = 110;
-  let cumulative = 0;
-  const slices = data.map((d, i) => {
-    const startAngle = (cumulative / total) * 2 * Math.PI;
-    cumulative += d.value;
-    const endAngle = (cumulative / total) * 2 * Math.PI;
-    const x1 = cx + radius * Math.sin(startAngle),
-      y1 = cy - radius * Math.cos(startAngle);
-    const x2 = cx + radius * Math.sin(endAngle),
-      y2 = cy - radius * Math.cos(endAngle);
-    const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
-    const path = `M${cx},${cy} L${x1},${y1} A${radius},${radius} 0 ${largeArc} 1 ${x2},${y2} Z`;
-    return (
-      <path
-        key={d.label}
-        d={path}
-        fill={PIE_COLORS[i % PIE_COLORS.length]}
-        stroke="var(--paper)"
-        strokeWidth="1.5"
-      />
-    );
-  });
+  const svgWidth = 660;
+  const svgHeight = 320;
+  const plotLeft = 85;
+  const plotRight = 630;
+  const plotTop = 45;
+  const plotBottom = 240;
+  const plotWidth = plotRight - plotLeft;
+  const plotHeight = plotBottom - plotTop;
+
+  const tickCount = 4;
+  const yTicks = Array.from({ length: tickCount + 1 }, (_, i) => Math.round((max / tickCount) * i));
+
+  const gap = 20;
+  const barWidth = (plotWidth - gap * (data.length + 1)) / data.length;
+
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: 20,
-        alignItems: "center",
-        flexWrap: "wrap",
-      }}
-    >
-      <svg
-        viewBox="0 0 220 220"
-        style={{ width: 190, height: 190, flexShrink: 0 }}
-      >
-        {slices}
+    <div style={{ width: "100%" }}>
+      <div style={{ marginBottom: "12px", borderBottom: "1px solid var(--stone, #e3d9c4)", paddingBottom: "8px" }}>
+        <h4 style={{ margin: 0, color: "var(--sindoor, #9a2b25)", fontSize: "1.05rem", fontFamily: "serif" }}>
+          📊 {chartTitle}
+        </h4>
+        <p style={{ margin: "4px 0 0", fontSize: "0.82rem", color: "var(--ink-soft, #6b5d4f)" }}>
+          {chartDescription}
+        </p>
+      </div>
+
+      <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={{ width: "100%", height: "auto", background: "#fffdf8", borderRadius: "8px" }}>
+        {/* Background Grid Lines & Y-Axis Ticks */}
+        {yTicks.map((val) => {
+          const y = plotBottom - (val / max) * plotHeight;
+          return (
+            <g key={`y_grid_${val}`}>
+              {/* Horizontal Grid Line */}
+              <line
+                x1={plotLeft}
+                y1={y}
+                x2={plotRight}
+                y2={y}
+                stroke="#e2e8f0"
+                strokeDasharray="4 4"
+                strokeWidth="1"
+              />
+              {/* Y-Tick Mark */}
+              <line x1={plotLeft - 5} y1={y} x2={plotLeft} y2={y} stroke="#475569" strokeWidth="1.5" />
+              {/* Y-Tick Text Value */}
+              <text
+                x={plotLeft - 9}
+                y={y + 4}
+                textAnchor="end"
+                fontSize="10"
+                fontWeight="500"
+                fill="#475569"
+              >
+                {unit === "₹" ? "₹" : ""}{val >= 1000 ? `${(val / 1000).toLocaleString("en-IN")}k` : val}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Y-AXIS LINE */}
+        <line x1={plotLeft} y1={plotTop - 10} x2={plotLeft} y2={plotBottom} stroke="#2a1f17" strokeWidth="2" />
+        {/* Y-Axis Arrowhead */}
+        <path d={`M${plotLeft - 4},${plotTop - 6} L${plotLeft},${plotTop - 14} L${plotLeft + 4},${plotTop - 6}`} fill="#2a1f17" />
+        {/* Y-AXIS ROTATED LABEL */}
+        <text
+          x={-(plotTop + plotHeight / 2)}
+          y={20}
+          transform="rotate(-90)"
+          textAnchor="middle"
+          fontSize="11"
+          fontWeight="bold"
+          fill="#9a2b25"
+        >
+          Y-Axis: {yAxisLabel}
+        </text>
+
+        {/* X-AXIS LINE */}
+        <line x1={plotLeft} y1={plotBottom} x2={plotRight + 10} y2={plotBottom} stroke="#2a1f17" strokeWidth="2" />
+        {/* X-Axis Arrowhead */}
+        <path d={`M${plotRight + 6},${plotBottom - 4} L${plotRight + 14},${plotBottom} L${plotRight + 6},${plotBottom + 4}`} fill="#2a1f17" />
+        {/* X-AXIS LABEL */}
+        <text
+          x={plotLeft + plotWidth / 2}
+          y={plotBottom + 52}
+          textAnchor="middle"
+          fontSize="11"
+          fontWeight="bold"
+          fill="#9a2b25"
+        >
+          X-Axis: {xAxisLabel}
+        </text>
+
+        {/* Bars and Data Labels */}
+        {data.map((d, i) => {
+          const barHeight = (d.value / max) * plotHeight;
+          const x = plotLeft + gap + i * (barWidth + gap);
+          const y = plotBottom - barHeight;
+          const barColor = PIE_COLORS[i % PIE_COLORS.length];
+
+          return (
+            <g key={d.label}>
+              {/* X-Tick Mark */}
+              <line x1={x + barWidth / 2} y1={plotBottom} x2={x + barWidth / 2} y2={plotBottom + 5} stroke="#475569" strokeWidth="1.5" />
+
+              {/* Bar Rect */}
+              <rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={barHeight}
+                rx="5"
+                fill={barColor}
+                stroke="#fff"
+                strokeWidth="1"
+              >
+                <title>{`${d.label}: ${unit === "₹" ? "₹" : ""}${d.value.toLocaleString("en-IN")} ${unit !== "₹" ? unit : ""}`}</title>
+              </rect>
+
+              {/* Top Value Label above Bar */}
+              <text
+                x={x + barWidth / 2}
+                y={y - 8}
+                textAnchor="middle"
+                fontSize="11"
+                fontWeight="bold"
+                fill="#2a1f17"
+              >
+                {unit === "₹" ? "₹" : ""}{d.value.toLocaleString("en-IN")}
+              </text>
+
+              {/* X-Axis Label under Bar */}
+              <text
+                x={x + barWidth / 2}
+                y={plotBottom + 20}
+                textAnchor="middle"
+                fontSize="10.5"
+                fontWeight="600"
+                fill="#2a1f17"
+              >
+                {d.label}
+              </text>
+            </g>
+          );
+        })}
       </svg>
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+
+      {/* Legend & Summary Box */}
+      <div style={{ marginTop: "12px", display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" }}>
         {data.map((d, i) => (
-          <div
-            key={d.label}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              fontSize: 12,
-            }}
-          >
-            <span
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: 3,
-                background: PIE_COLORS[i % PIE_COLORS.length],
-                display: "inline-block",
-              }}
-            />
-            {d.label} — {((d.value / total) * 100).toFixed(1)}%
+          <div key={d.label} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.8rem", background: "#f8fafc", padding: "4px 10px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+            <span style={{ width: 12, height: 12, borderRadius: 3, background: PIE_COLORS[i % PIE_COLORS.length] }} />
+            <strong>{d.label}:</strong> {unit === "₹" ? "₹" : ""}{d.value.toLocaleString("en-IN")}
           </div>
         ))}
       </div>
@@ -342,6 +413,314 @@ function PieChart({ data }) {
   );
 }
 
+// -------------------------------------------------------------
+// 2. Enhanced Pie Chart (with Percentage breakdown & Legend Key)
+// -------------------------------------------------------------
+function PieChart({ data, unit, chartTitle, chartDescription }) {
+  const total = data.reduce((s, d) => s + d.value, 0) || 1;
+  const radius = 95, cx = 115, cy = 115;
+  let cumulative = 0;
+
+  const slices = data.map((d, i) => {
+    const startAngle = (cumulative / total) * 2 * Math.PI;
+    cumulative += d.value;
+    const endAngle = (cumulative / total) * 2 * Math.PI;
+    const x1 = cx + radius * Math.sin(startAngle);
+    const y1 = cy - radius * Math.cos(startAngle);
+    const x2 = cx + radius * Math.sin(endAngle);
+    const y2 = cy - radius * Math.cos(endAngle);
+    const largeArc = endAngle - startAngle > Math.PI ? 1 : 0;
+    const path = `M${cx},${cy} L${x1},${y1} A${radius},${radius} 0 ${largeArc} 1 ${x2},${y2} Z`;
+
+    const midAngle = startAngle + (endAngle - startAngle) / 2;
+    const labelX = cx + (radius * 0.65) * Math.sin(midAngle);
+    const labelY = cy - (radius * 0.65) * Math.cos(midAngle);
+    const pct = ((d.value / total) * 100).toFixed(1);
+
+    return (
+      <g key={d.label}>
+        <path
+          d={path}
+          fill={PIE_COLORS[i % PIE_COLORS.length]}
+          stroke="#fff"
+          strokeWidth="2"
+        >
+          <title>{`${d.label}: ${unit === "₹" ? "₹" : ""}${d.value.toLocaleString("en-IN")} (${pct}%)`}</title>
+        </path>
+        {pct > 5 && (
+          <text
+            x={labelX}
+            y={labelY + 4}
+            textAnchor="middle"
+            fontSize="10"
+            fontWeight="bold"
+            fill="#ffffff"
+          >
+            {pct}%
+          </text>
+        )}
+      </g>
+    );
+  });
+
+  return (
+    <div style={{ width: "100%" }}>
+      <div style={{ marginBottom: "12px", borderBottom: "1px solid var(--stone, #e3d9c4)", paddingBottom: "8px" }}>
+        <h4 style={{ margin: 0, color: "var(--sindoor, #9a2b25)", fontSize: "1.05rem", fontFamily: "serif" }}>
+          🍕 {chartTitle} (Proportional Share)
+        </h4>
+        <p style={{ margin: "4px 0 0", fontSize: "0.82rem", color: "var(--ink-soft, #6b5d4f)" }}>
+          {chartDescription} Represents relative percentage breakdown of the total ({unit === "₹" ? "₹" : ""}{total.toLocaleString("en-IN")}).
+        </p>
+      </div>
+
+      <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+        <svg viewBox="0 0 230 230" style={{ width: 210, height: 210, flexShrink: 0 }}>
+          {slices}
+        </svg>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minWidth: "220px" }}>
+          {data.map((d, i) => {
+            const pct = ((d.value / total) * 100).toFixed(1);
+            return (
+              <div
+                key={d.label}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  fontSize: "0.85rem"
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span
+                    style={{
+                      width: 12,
+                      height: 12,
+                      borderRadius: 3,
+                      background: PIE_COLORS[i % PIE_COLORS.length],
+                      display: "inline-block",
+                    }}
+                  />
+                  <strong style={{ color: "#2a1f17" }}>{d.label}</strong>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ fontWeight: "bold", color: "#9a2b25" }}>
+                    {unit === "₹" ? "₹" : ""}{d.value.toLocaleString("en-IN")}
+                  </div>
+                  <div style={{ fontSize: "0.75rem", color: "#64748b" }}>{pct}% share</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// 3. New Scatter Chart (with Cartesian X/Y Axis, Trend line & Points)
+// -------------------------------------------------------------
+function ScatterChart({ data, unit, xAxisLabel, yAxisLabel, chartTitle, chartDescription }) {
+  const rawMax = Math.max(...data.map((d) => d.value)) || 100;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(rawMax)));
+  const max = Math.ceil(rawMax / magnitude) * magnitude || rawMax;
+
+  const svgWidth = 660;
+  const svgHeight = 320;
+  const plotLeft = 85;
+  const plotRight = 630;
+  const plotTop = 45;
+  const plotBottom = 240;
+  const plotWidth = plotRight - plotLeft;
+  const plotHeight = plotBottom - plotTop;
+
+  const tickCount = 4;
+  const yTicks = Array.from({ length: tickCount + 1 }, (_, i) => Math.round((max / tickCount) * i));
+
+  // Compute Scatter Points coordinates
+  const points = data.map((d, i) => {
+    const x = plotLeft + ((i + 0.5) / data.length) * plotWidth;
+    const y = plotBottom - (d.value / max) * plotHeight;
+    return { ...d, x, y, index: i };
+  });
+
+  // Polyline string connecting scatter points
+  const polylinePoints = points.map((p) => `${p.x},${p.y}`).join(" ");
+
+  return (
+    <div style={{ width: "100%" }}>
+      <div style={{ marginBottom: "12px", borderBottom: "1px solid var(--stone, #e3d9c4)", paddingBottom: "8px" }}>
+        <h4 style={{ margin: 0, color: "var(--sindoor, #9a2b25)", fontSize: "1.05rem", fontFamily: "serif" }}>
+          📈 {chartTitle} (Scatter Distribution Plot)
+        </h4>
+        <p style={{ margin: "4px 0 0", fontSize: "0.82rem", color: "var(--ink-soft, #6b5d4f)" }}>
+          {chartDescription} Plots metric point values on a Cartesian X/Y coordinate plane.
+        </p>
+      </div>
+
+      <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} style={{ width: "100%", height: "auto", background: "#fffdf8", borderRadius: "8px" }}>
+        {/* Background Grid Lines & Y-Ticks */}
+        {yTicks.map((val) => {
+          const y = plotBottom - (val / max) * plotHeight;
+          return (
+            <g key={`y_scatter_grid_${val}`}>
+              <line
+                x1={plotLeft}
+                y1={y}
+                x2={plotRight}
+                y2={y}
+                stroke="#e2e8f0"
+                strokeDasharray="4 4"
+                strokeWidth="1"
+              />
+              <line x1={plotLeft - 5} y1={y} x2={plotLeft} y2={y} stroke="#475569" strokeWidth="1.5" />
+              <text
+                x={plotLeft - 9}
+                y={y + 4}
+                textAnchor="end"
+                fontSize="10"
+                fontWeight="500"
+                fill="#475569"
+              >
+                {unit === "₹" ? "₹" : ""}{val >= 1000 ? `${(val / 1000).toLocaleString("en-IN")}k` : val}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Y-AXIS LINE */}
+        <line x1={plotLeft} y1={plotTop - 10} x2={plotLeft} y2={plotBottom} stroke="#2a1f17" strokeWidth="2" />
+        <path d={`M${plotLeft - 4},${plotTop - 6} L${plotLeft},${plotTop - 14} L${plotLeft + 4},${plotTop - 6}`} fill="#2a1f17" />
+        {/* Y-AXIS ROTATED LABEL */}
+        <text
+          x={-(plotTop + plotHeight / 2)}
+          y={20}
+          transform="rotate(-90)"
+          textAnchor="middle"
+          fontSize="11"
+          fontWeight="bold"
+          fill="#9a2b25"
+        >
+          Y-Axis: {yAxisLabel}
+        </text>
+
+        {/* X-AXIS LINE */}
+        <line x1={plotLeft} y1={plotBottom} x2={plotRight + 10} y2={plotBottom} stroke="#2a1f17" strokeWidth="2" />
+        <path d={`M${plotRight + 6},${plotBottom - 4} L${plotRight + 14},${plotBottom} L${plotRight + 6},${plotBottom + 4}`} fill="#2a1f17" />
+        {/* X-AXIS LABEL */}
+        <text
+          x={plotLeft + plotWidth / 2}
+          y={plotBottom + 52}
+          textAnchor="middle"
+          fontSize="11"
+          fontWeight="bold"
+          fill="#9a2b25"
+        >
+          X-Axis: {xAxisLabel}
+        </text>
+
+        {/* Connecting Trend Line */}
+        <polyline
+          fill="none"
+          stroke="var(--gold, #c08829)"
+          strokeWidth="2.5"
+          strokeDasharray="6 4"
+          points={polylinePoints}
+        />
+
+        {/* Scatter Points & Labels */}
+        {points.map((p, i) => {
+          const pointColor = PIE_COLORS[i % PIE_COLORS.length];
+          return (
+            <g key={p.label}>
+              {/* Vertical guideline from point to X-axis */}
+              <line
+                x1={p.x}
+                y1={p.y}
+                x2={p.x}
+                y2={plotBottom}
+                stroke="#cbd5e1"
+                strokeDasharray="2 2"
+                strokeWidth="1"
+              />
+
+              {/* X-Tick Mark */}
+              <line x1={p.x} y1={plotBottom} x2={p.x} y2={plotBottom + 5} stroke="#475569" strokeWidth="1.5" />
+
+              {/* Outer Pulse Circle */}
+              <circle cx={p.x} cy={p.y} r="12" fill={pointColor} opacity="0.18" />
+
+              {/* Core Scatter Point Circle */}
+              <circle
+                cx={p.x}
+                cy={p.y}
+                r="7"
+                fill={pointColor}
+                stroke="#ffffff"
+                strokeWidth="2"
+              >
+                <title>{`Point (${p.label}): ${unit === "₹" ? "₹" : ""}${p.value.toLocaleString("en-IN")}`}</title>
+              </circle>
+
+              {/* Value Badge above Point */}
+              <rect
+                x={p.x - 45}
+                y={p.y - 30}
+                width="90"
+                height="18"
+                rx="4"
+                fill="#2a1f17"
+                opacity="0.85"
+              />
+              <text
+                x={p.x}
+                y={p.y - 17}
+                textAnchor="middle"
+                fontSize="10"
+                fontWeight="bold"
+                fill="#ffffff"
+              >
+                {unit === "₹" ? "₹" : ""}{p.value.toLocaleString("en-IN")}
+              </text>
+
+              {/* X-Axis Category Label */}
+              <text
+                x={p.x}
+                y={plotBottom + 20}
+                textAnchor="middle"
+                fontSize="10.5"
+                fontWeight="600"
+                fill="#2a1f17"
+              >
+                {p.label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Scatter Legend Summary */}
+      <div style={{ marginTop: "12px", display: "flex", gap: "10px", flexWrap: "wrap", justifyContent: "center" }}>
+        {points.map((p, i) => (
+          <div key={p.label} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.8rem", background: "#f8fafc", padding: "4px 10px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+            <span style={{ width: 10, height: 10, borderRadius: "50%", background: PIE_COLORS[i % PIE_COLORS.length] }} />
+            <strong>({p.label}, {unit === "₹" ? "₹" : ""}{p.value.toLocaleString("en-IN")})</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// -------------------------------------------------------------
+// Main Reports Component
+// -------------------------------------------------------------
 export default function Reports() {
   const { showToast } = useToast();
   const { tr } = useLanguage();
@@ -353,7 +732,7 @@ export default function Reports() {
   );
   const [stage, setStage] = useState("form"); // 'form' | 'chart'
   const [pendingDownload, setPendingDownload] = useState(false);
-  const [chartMode, setChartMode] = useState("bar"); // 'bar' | 'pie'
+  const [chartMode, setChartMode] = useState("bar"); // 'bar' | 'pie' | 'scatter'
   const [recent, setRecent] = useState(INITIAL_RECENT);
 
   const activeType = useMemo(
@@ -427,14 +806,14 @@ export default function Reports() {
     <div className="reports-page">
       <style>{`
         .report-chart-panel{display:flex;gap:18px;margin-top:18px;flex-wrap:wrap;}
-        .report-chart-box{flex:1;min-width:300px;background:var(--ivory);border-radius:14px;padding:18px;border:1px solid var(--stone);}
+        .report-chart-box{flex:1;min-width:320px;background:var(--ivory);border-radius:14px;padding:22px;border:1px solid var(--stone);}
         .report-format-box{width:230px;display:flex;flex-direction:column;gap:10px;}
-        .chart-toggle{display:flex;gap:8px;margin-bottom:12px;}
+        .chart-toggle{display:flex;gap:8px;margin-bottom:16px;background:#eee5d3;padding:4px;border-radius:10px;width:fit-content;}
         .chart-toggle button{
-          border:1px solid var(--stone-dark);background:var(--paper);border-radius:8px;padding:5px 12px;
-          font-size:11.5px;cursor:pointer;color:var(--ink-soft);
+          border:none;background:transparent;border-radius:8px;padding:6px 14px;
+          font-size:12px;font-weight:bold;cursor:pointer;color:var(--ink-soft);transition:all 0.2s;
         }
-        .chart-toggle button.active{background:var(--sindoor);color:#fff;border-color:var(--sindoor);}
+        .chart-toggle button.active{background:var(--sindoor);color:#fff;box-shadow:0 2px 6px rgba(154,43,37,0.3);}
         .format-card{
           border:1px solid var(--stone);border-radius:12px;padding:14px 16px;background:var(--paper);
           text-align:left;cursor:pointer;transition:box-shadow 0.2s ease, border-color 0.2s ease;
@@ -459,7 +838,7 @@ export default function Reports() {
 
       <div className="panel">
         <div className="panel-head">
-          <h3>{tr("Report Generator")} — {tr(activeType.label)}</h3>
+          <h3>{tr("Report Analytics Generator")} — {tr(activeType.label)}</h3>
         </div>
         <div className="panel-body">
           <div className="form-grid">
@@ -493,37 +872,67 @@ export default function Reports() {
           </div>
           <div className="form-actions">
             <button className="btn-secondary" onClick={handlePreview}>
-              {tr("Preview Report")}
+              👁️ {tr("Preview Report & Charts")}
             </button>
             <button className="btn-primary" onClick={handleGenerate}>
-              {tr("Generate & Download")}
+              📥 {tr("Generate & Download")}
             </button>
           </div>
 
           {stage === "chart" && (
             <div className="report-chart-panel">
               <div className="report-chart-box">
+                {/* 3 Chart Mode Selectors */}
                 <div className="chart-toggle">
                   <button
                     className={chartMode === "bar" ? "active" : ""}
                     onClick={() => setChartMode("bar")}
                   >
-                    {tr("Bar Chart")}
+                    📊 {tr("Bar Chart")}
                   </button>
                   <button
                     className={chartMode === "pie" ? "active" : ""}
                     onClick={() => setChartMode("pie")}
                   >
-                    {tr("Pie Chart")}
+                    🍕 {tr("Pie Chart")}
+                  </button>
+                  <button
+                    className={chartMode === "scatter" ? "active" : ""}
+                    onClick={() => setChartMode("scatter")}
+                  >
+                    📈 {tr("Scatter Chart")}
                   </button>
                 </div>
-                {chartMode === "bar" ? (
+
+                {chartMode === "bar" && (
                   <BarChart
                     data={activeType.chartData.map(d => ({ ...d, label: tr(d.label) }))}
                     unit={activeType.unit}
+                    xAxisLabel={tr(activeType.xAxisLabel)}
+                    yAxisLabel={tr(activeType.yAxisLabel)}
+                    chartTitle={tr(activeType.chartTitle)}
+                    chartDescription={tr(activeType.chartDescription)}
                   />
-                ) : (
-                  <PieChart data={activeType.chartData.map(d => ({ ...d, label: tr(d.label) }))} />
+                )}
+
+                {chartMode === "pie" && (
+                  <PieChart
+                    data={activeType.chartData.map(d => ({ ...d, label: tr(d.label) }))}
+                    unit={activeType.unit}
+                    chartTitle={tr(activeType.chartTitle)}
+                    chartDescription={tr(activeType.chartDescription)}
+                  />
+                )}
+
+                {chartMode === "scatter" && (
+                  <ScatterChart
+                    data={activeType.chartData.map(d => ({ ...d, label: tr(d.label) }))}
+                    unit={activeType.unit}
+                    xAxisLabel={tr(activeType.xAxisLabel)}
+                    yAxisLabel={tr(activeType.yAxisLabel)}
+                    chartTitle={tr(activeType.chartTitle)}
+                    chartDescription={tr(activeType.chartDescription)}
+                  />
                 )}
               </div>
 
@@ -532,6 +941,7 @@ export default function Reports() {
                   <p
                     style={{
                       fontSize: 12,
+                      fontWeight: "bold",
                       color: "var(--ink-soft)",
                       margin: "0 0 4px",
                     }}
@@ -600,3 +1010,4 @@ export default function Reports() {
     </div>
   );
 }
+

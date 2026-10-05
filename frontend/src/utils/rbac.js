@@ -1,8 +1,9 @@
 export const ALLOWED_PAGES_BY_ROLE = {
-  administrator: ["dashboard", "activities", "festivals", "annadhanam", "priests", "staff", "donations", "inventory", "reports"],
-  admin: ["dashboard", "activities", "festivals", "annadhanam", "priests", "staff", "donations", "inventory", "reports"],
-  priest: ["activities", "festivals"],
-  treasurer: ["donations", "reports"],
+  administrator: ["dashboard", "panchangam", "abharanam", "activities", "festivals", "annadhanam", "priests", "staff", "donations", "inventory", "reports", "audit"],
+  admin: ["dashboard", "panchangam", "abharanam", "activities", "festivals", "annadhanam", "priests", "staff", "donations", "inventory", "reports", "audit"],
+  priest: ["panchangam", "abharanam", "activities", "festivals"],
+  treasurer: ["donations", "reports", "inventory", "abharanam"],
+  staff: ["dashboard", "panchangam", "activities", "inventory"],
 };
 
 export function isPageAllowed(role, page) {
@@ -16,7 +17,8 @@ export function isPageAllowed(role, page) {
 
 export function getDefaultRouteForRole(role) {
   const normRole = (role || "").toLowerCase();
-  if (normRole === "priest") return "/activities";
+  if (normRole === "priest") return "/panchangam";
   if (normRole === "treasurer") return "/donations";
   return "/dashboard";
 }
+

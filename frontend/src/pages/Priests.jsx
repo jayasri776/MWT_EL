@@ -14,7 +14,6 @@ const PILL_CLASS = {
   "On Duty": "amber",
   "On Leave": "red",
 };
-
 const INITIAL_PRIESTS = [
   {
     id: 1,

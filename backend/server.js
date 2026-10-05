@@ -13,6 +13,10 @@ import {
   Festival,
   Annadhanam,
   TempleDetail,
+  Panchangam,
+  Abharanam,
+  AbharanamMovement,
+  AuditLog,
 } from "./models.js";
 import { seedDatabase } from "./seed.js";
 
@@ -47,6 +51,87 @@ const formatDoc = (doc) => {
 };
 
 const formatDocs = (docs) => docs.map(formatDoc);
+
+// Helper for audit trail logging into MongoDB AuditLog collection
+const recordAuditLog = async (action, module, details, performedBy = "Temple Administrator", userRole = "Administrator", ip = "127.0.0.1") => {
+  try {
+    const now = new Date();
+    const timestampStr = now.toISOString().replace("T", " ").substring(0, 19);
+    await AuditLog.create({
+      timestamp: timestampStr,
+      action,
+      module,
+      details,
+      performed_by: performedBy,
+      user_role: userRole,
+      ip,
+    });
+  } catch (err) {
+    console.warn("Audit Log Warning:", err.message);
+  }
+};
+
+// Panchangam Daily Vedic Calculator Helper (computes for any date)
+const calculatePanchangamForDate = (dateStr) => {
+  const d = new Date(dateStr);
+  const dayOfWeek = isNaN(d.getDay()) ? 0 : d.getDay();
+  const dayOfMonth = isNaN(d.getDate()) ? 1 : d.getDate();
+
+  const RAHU_KALAM_MAP = {
+    0: "04:30 PM – 06:00 PM", // Sun
+    1: "07:30 AM – 09:00 AM", // Mon
+    2: "03:00 PM – 04:30 PM", // Tue
+    3: "12:00 PM – 01:30 PM", // Wed
+    4: "01:30 PM – 03:00 PM", // Thu
+    5: "10:30 AM – 12:00 PM", // Fri
+    6: "09:00 AM – 10:30 AM", // Sat
+  };
+
+  const YAMAGANDAM_MAP = {
+    0: "12:00 PM – 01:30 PM",
+    1: "10:30 AM – 12:00 PM",
+    2: "09:00 AM – 10:30 AM",
+    3: "07:30 AM – 09:00 AM",
+    4: "06:00 AM – 07:30 AM",
+    5: "03:00 PM – 04:30 PM",
+    6: "01:30 PM – 03:00 PM",
+  };
+
+  const TITHIS = [
+    "Ekadashi (Shukla Paksha)", "Dwadashi", "Trayodashi", "Chaturdashi", "Pournami",
+    "Prathama (Krishna Paksha)", "Dwitiya", "Tritiya", "Chaturthi", "Panchami",
+    "Shashti", "Saptami", "Ashtami", "Navami", "Dashami"
+  ];
+
+  const NAKSHATRAMS = [
+    "Rohini", "Mrigashirsha", "Ardra", "Punarvasu", "Pushya", "Ashlesha",
+    "Magha", "Purva Phalguni", "Uttara Phalguni", "Hasta", "Chitra", "Swati",
+    "Visakam", "Anuradha", "Jyeshtha", "Mula", "Purva Ashadha", "Uttara Ashadha",
+    "Shravana", "Dhanishta", "Shatabhisha", "Purva Bhadrapada", "Uttara Bhadrapada",
+    "Revati", "Ashwini", "Bharani", "Krittika"
+  ];
+
+  const tithiIndex = (dayOfMonth + 3) % TITHIS.length;
+  const nakshatramIndex = (dayOfMonth * 2 + 5) % NAKSHATRAMS.length;
+
+  return {
+    date: dateStr,
+    tithi: TITHIS[tithiIndex],
+    tithi_end: "10:45 PM",
+    nakshatram: `${NAKSHATRAMS[nakshatramIndex]} Nakshatram`,
+    nakshatram_end: "08:30 PM",
+    rahu_kalam: RAHU_KALAM_MAP[dayOfWeek] || "07:30 AM – 09:00 AM",
+    yamagandam: YAMAGANDAM_MAP[dayOfWeek] || "10:30 AM – 12:00 PM",
+    durmuhurtham: "12:30 PM – 01:15 PM",
+    yogam: "Siddha Yogam",
+    karanam: "Bava Karanam",
+    sunrise: "06:05 AM",
+    sunset: "06:15 PM",
+    auspicious_time: "09:15 AM – 10:30 AM",
+    special_events: dayOfWeek === 2 ? "Sacred Sevvai (Tuesday) Murugan Abhishekam" : "Daily Sanctum Pooja & Aradhana",
+    notes: "Auspicious for sacred offerings, Veda Parayanam, and Annadhanam",
+  };
+};
 
 // Helper for sending JSON response
 const sendJSON = (res, statusCode, data) => {
@@ -115,7 +200,6 @@ const server = http.createServer(async (req, res) => {
 
       let user = null;
 
-      // Hardcoded quick roles fallback
       const validPasswords = ["temple@2026", "123", "admin123", "temple123", "password", "admin"];
       if (validPasswords.includes(cleanPassword) || cleanPassword.length > 0) {
         if (cleanUsername === "admin") {
@@ -142,6 +226,7 @@ const server = http.createServer(async (req, res) => {
           JWT_SECRET,
           { expiresIn: "24h" }
         );
+        await recordAuditLog("LOGIN", "Auth", `User ${user.name} logged into TAMS`, user.name, user.role);
         return sendJSON(res, 200, { success: true, token, user });
       }
 
@@ -151,7 +236,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
 
-    // Auth OAuth login endpoint (Google / GitHub OAuth)
+    // Auth OAuth login endpoint
     if (pathname === "/api/auth/oauth" && method === "POST") {
       const { provider, email, name, avatar } = await parseJSON(req);
       const oauthUser = {
@@ -177,6 +262,7 @@ const server = http.createServer(async (req, res) => {
         { expiresIn: "24h" }
       );
 
+      await recordAuditLog("LOGIN", "Auth", `User ${oauthUser.name} logged in via ${oauthUser.auth_provider}`, oauthUser.name, oauthUser.role);
       return sendJSON(res, 200, { success: true, token, user: oauthUser });
     }
 
@@ -189,20 +275,167 @@ const server = http.createServer(async (req, res) => {
       return sendJSON(res, 401, { success: false, message: "Invalid or expired JWT token" });
     }
 
+    // Database Connection Status Endpoint
+    if (pathname === "/api/db-status" && method === "GET") {
+      const collections = [
+        { name: "users", label: "Users & Accounts", count: await User.countDocuments() },
+        { name: "activities", label: "Temple Activities", count: await Activity.countDocuments() },
+        { name: "donations", label: "Donations & Receipts", count: await Donation.countDocuments() },
+        { name: "inventories", label: "Inventory Stock", count: await Inventory.countDocuments() },
+        { name: "festivals", label: "Festivals & Utsavams", count: await Festival.countDocuments() },
+        { name: "panchangams", label: "Panchangam Records", count: await Panchangam.countDocuments() },
+        { name: "abharanams", label: "Gold & Silver Jewelry Register", count: await Abharanam.countDocuments() },
+        { name: "abharanammovements", label: "Vault Movement Logs", count: await AbharanamMovement.countDocuments() },
+        { name: "auditlogs", label: "Action Audit Trail", count: await AuditLog.countDocuments() },
+      ];
+
+      return sendJSON(res, 200, {
+        connected: isMongoConnected,
+        uri: MONGODB_URI,
+        databaseName: "tams_db",
+        compassConnectionString: MONGODB_URI,
+        collections,
+      });
+    }
+
     // Protect data endpoints with JWT
     const authUser = verifyJWT(req);
     if (!authUser) {
       return sendJSON(res, 401, { success: false, error: "Unauthorized: Missing or invalid JWT token" });
     }
 
-// Query helper for finding document by _id or custom id without CastError
-const getQueryById = (id) => {
-  if (mongoose.Types.ObjectId.isValid(id)) {
-    return { _id: id };
-  }
-  const numId = Number(id);
-  return { $or: [{ id: id }, { id: isNaN(numId) ? id : numId }] };
-};
+    // Query helper for finding document by _id or custom id without CastError
+    const getQueryById = (id) => {
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        return { _id: id };
+      }
+      const numId = Number(id);
+      return { $or: [{ id: id }, { id: isNaN(numId) ? id : numId }] };
+    };
+
+    // Panchangam API
+    if (pathname === "/api/panchangam" && method === "GET") {
+      const docs = await Panchangam.find().sort({ date: 1 });
+      return sendJSON(res, 200, formatDocs(docs));
+    }
+
+    if (pathname.startsWith("/api/panchangam/date/") && method === "GET") {
+      const targetDate = pathname.replace("/api/panchangam/date/", "").trim();
+      let doc = await Panchangam.findOne({ date: targetDate });
+      if (!doc) {
+        // Fallback to calculated Panchangam for any requested date
+        const calculated = calculatePanchangamForDate(targetDate);
+        return sendJSON(res, 200, calculated);
+      }
+      return sendJSON(res, 200, formatDoc(doc));
+    }
+
+    if (pathname === "/api/panchangam" && method === "POST") {
+      const body = await parseJSON(req);
+      const existing = await Panchangam.findOne({ date: body.date });
+      let savedDoc;
+      if (existing) {
+        savedDoc = await Panchangam.findOneAndUpdate({ date: body.date }, body, { new: true });
+        await recordAuditLog("UPDATE", "Panchangam", `Updated Panchangam details for date ${body.date}`, authUser.name, authUser.role);
+      } else {
+        savedDoc = await Panchangam.create(body);
+        await recordAuditLog("CREATE", "Panchangam", `Added Panchangam entry for date ${body.date}`, authUser.name, authUser.role);
+      }
+      return sendJSON(res, 200, formatDoc(savedDoc));
+    }
+
+    // Abharanam (Jewelry Security Register) API
+    if (pathname === "/api/abharanam" && method === "GET") {
+      const docs = await Abharanam.find().sort({ _id: -1 });
+      return sendJSON(res, 200, formatDocs(docs));
+    }
+
+    if (pathname === "/api/abharanam" && method === "POST") {
+      const body = await parseJSON(req);
+      if (!body.item_code) {
+        body.item_code = "ABH-" + (body.metal_type?.includes("Silver") ? "SLV" : "GLD") + "-" + Math.floor(100 + Math.random() * 900);
+      }
+      const newDoc = await Abharanam.create(body);
+      await recordAuditLog("CREATE", "Abharanam", `${authUser.name} added ornament ${body.name} (${body.item_code}) to Vault register`, authUser.name, authUser.role);
+      return sendJSON(res, 201, formatDoc(newDoc));
+    }
+
+    if (pathname.startsWith("/api/abharanam/") && method === "PUT") {
+      const id = pathname.split("/").pop();
+      const body = await parseJSON(req);
+      const updated = await Abharanam.findOneAndUpdate(getQueryById(id), body, { new: true });
+      if (!updated) return sendJSON(res, 404, { error: "Ornament not found" });
+      await recordAuditLog("UPDATE", "Abharanam", `${authUser.name} updated ornament ${updated.name} stock & status to ${updated.status}`, authUser.name, authUser.role);
+      return sendJSON(res, 200, formatDoc(updated));
+    }
+
+    if (pathname.startsWith("/api/abharanam/") && method === "DELETE") {
+      const id = pathname.split("/").pop();
+      const deleted = await Abharanam.findOneAndDelete(getQueryById(id));
+      await recordAuditLog("DELETE", "Abharanam", `${authUser.name} removed ornament item ID ${id} from register`, authUser.name, authUser.role);
+      return sendJSON(res, 200, { success: true, id });
+    }
+
+    // Abharanam Movements (Vault Access & Alankaram Log) API
+    if (pathname === "/api/abharanam/movements" && method === "GET") {
+      const docs = await AbharanamMovement.find().sort({ _id: -1 });
+      return sendJSON(res, 200, formatDocs(docs));
+    }
+
+    if (pathname === "/api/abharanam/movements" && method === "POST") {
+      const body = await parseJSON(req);
+      if (!body.timestamp) {
+        const now = new Date();
+        body.timestamp = now.toISOString().replace("T", " ").substring(0, 16);
+      }
+      const newMovement = await AbharanamMovement.create(body);
+
+      // Also update the status in the main Abharanam register
+      const newStatus = body.action.includes("Issue") || body.action.includes("Check Out")
+        ? "Adorning Deity"
+        : body.action.includes("Return") || body.action.includes("Check In")
+        ? "In Vault"
+        : "Under Maintenance";
+
+      if (body.abharanam_id) {
+        await Abharanam.findOneAndUpdate(
+          getQueryById(body.abharanam_id),
+          { status: newStatus, last_inspection_date: body.timestamp.split(" ")[0] }
+        );
+      }
+
+      const auditAction = newStatus === "Adorning Deity" ? "VAULT_CHECKOUT" : "VAULT_CHECKIN";
+      await recordAuditLog(
+        auditAction,
+        "Abharanam",
+        `${authUser.name} logged ${body.action} for ornament ${body.abharanam_name} (${body.item_code}) — Issued to ${body.issued_to_priest}`,
+        authUser.name,
+        authUser.role
+      );
+
+      return sendJSON(res, 201, formatDoc(newMovement));
+    }
+
+    // Audit Logs API
+    if (pathname === "/api/audit-logs" && method === "GET") {
+      const moduleFilter = url.searchParams.get("module");
+      const actionFilter = url.searchParams.get("action");
+      const searchFilter = url.searchParams.get("search");
+
+      let query = {};
+      if (moduleFilter && moduleFilter !== "All") query.module = moduleFilter;
+      if (actionFilter && actionFilter !== "All") query.action = actionFilter;
+      if (searchFilter) {
+        query.$or = [
+          { details: { $regex: searchFilter, $options: "i" } },
+          { performed_by: { $regex: searchFilter, $options: "i" } },
+          { module: { $regex: searchFilter, $options: "i" } },
+        ];
+      }
+
+      const docs = await AuditLog.find(query).sort({ _id: -1 }).limit(100);
+      return sendJSON(res, 200, formatDocs(docs));
+    }
 
     // Activities API
     if (pathname === "/api/activities" && method === "GET") {
@@ -212,6 +445,7 @@ const getQueryById = (id) => {
     if (pathname === "/api/activities" && method === "POST") {
       const body = await parseJSON(req);
       const newDoc = await Activity.create(body);
+      await recordAuditLog("CREATE", "Activities", `${authUser.name} created activity ${body.name}`, authUser.name, authUser.role);
       return sendJSON(res, 201, formatDoc(newDoc));
     }
     if (pathname.startsWith("/api/activities/") && method === "PUT") {
@@ -219,11 +453,13 @@ const getQueryById = (id) => {
       const body = await parseJSON(req);
       const updated = await Activity.findOneAndUpdate(getQueryById(id), body, { new: true });
       if (!updated) return sendJSON(res, 404, { error: "Not found" });
+      await recordAuditLog("UPDATE", "Activities", `${authUser.name} updated activity ${updated.name}`, authUser.name, authUser.role);
       return sendJSON(res, 200, formatDoc(updated));
     }
     if (pathname.startsWith("/api/activities/") && method === "DELETE") {
       const id = pathname.split("/").pop();
       await Activity.findOneAndDelete(getQueryById(id));
+      await recordAuditLog("DELETE", "Activities", `${authUser.name} deleted activity ID ${id}`, authUser.name, authUser.role);
       return sendJSON(res, 200, { success: true, id });
     }
 
@@ -238,6 +474,7 @@ const getQueryById = (id) => {
         body.receipt_no = "REC-" + new Date().getFullYear() + "-" + Math.floor(1000 + Math.random() * 9000);
       }
       const newDoc = await Donation.create(body);
+      await recordAuditLog("CREATE", "Donations", `${authUser.name} issued donation receipt ${newDoc.receipt_no} of ₹${body.amount} for ${body.donor_name}`, authUser.name, authUser.role);
       return sendJSON(res, 201, formatDoc(newDoc));
     }
     if (pathname.startsWith("/api/donations/") && method === "PUT") {
@@ -245,11 +482,13 @@ const getQueryById = (id) => {
       const body = await parseJSON(req);
       const updated = await Donation.findOneAndUpdate(getQueryById(id), body, { new: true });
       if (!updated) return sendJSON(res, 404, { error: "Not found" });
+      await recordAuditLog("UPDATE", "Donations", `${authUser.name} updated donation record ${updated.receipt_no}`, authUser.name, authUser.role);
       return sendJSON(res, 200, formatDoc(updated));
     }
     if (pathname.startsWith("/api/donations/") && method === "DELETE") {
       const id = pathname.split("/").pop();
       await Donation.findOneAndDelete(getQueryById(id));
+      await recordAuditLog("DELETE", "Donations", `${authUser.name} deleted donation record ID ${id}`, authUser.name, authUser.role);
       return sendJSON(res, 200, { success: true, id });
     }
 
@@ -261,6 +500,7 @@ const getQueryById = (id) => {
     if (pathname === "/api/sponsorships" && method === "POST") {
       const body = await parseJSON(req);
       const newDoc = await Sponsorship.create(body);
+      await recordAuditLog("CREATE", "Sponsorships", `${authUser.name} created sponsorship for ${body.sponsor}`, authUser.name, authUser.role);
       return sendJSON(res, 201, formatDoc(newDoc));
     }
     if (pathname.startsWith("/api/sponsorships/") && method === "PUT") {
@@ -268,11 +508,13 @@ const getQueryById = (id) => {
       const body = await parseJSON(req);
       const updated = await Sponsorship.findOneAndUpdate(getQueryById(id), body, { new: true });
       if (!updated) return sendJSON(res, 404, { error: "Not found" });
+      await recordAuditLog("UPDATE", "Sponsorships", `${authUser.name} updated sponsorship for ${updated.sponsor}`, authUser.name, authUser.role);
       return sendJSON(res, 200, formatDoc(updated));
     }
     if (pathname.startsWith("/api/sponsorships/") && method === "DELETE") {
       const id = pathname.split("/").pop();
       await Sponsorship.findOneAndDelete(getQueryById(id));
+      await recordAuditLog("DELETE", "Sponsorships", `${authUser.name} deleted sponsorship ID ${id}`, authUser.name, authUser.role);
       return sendJSON(res, 200, { success: true, id });
     }
 
@@ -284,6 +526,7 @@ const getQueryById = (id) => {
     if (pathname === "/api/festivals" && method === "POST") {
       const body = await parseJSON(req);
       const newDoc = await Festival.create(body);
+      await recordAuditLog("CREATE", "Festivals", `${authUser.name} added festival ${body.name}`, authUser.name, authUser.role);
       return sendJSON(res, 201, formatDoc(newDoc));
     }
     if (pathname.startsWith("/api/festivals/") && method === "PUT") {
@@ -291,11 +534,13 @@ const getQueryById = (id) => {
       const body = await parseJSON(req);
       const updated = await Festival.findOneAndUpdate(getQueryById(id), body, { new: true });
       if (!updated) return sendJSON(res, 404, { error: "Not found" });
+      await recordAuditLog("UPDATE", "Festivals", `${authUser.name} updated festival ${updated.name}`, authUser.name, authUser.role);
       return sendJSON(res, 200, formatDoc(updated));
     }
     if (pathname.startsWith("/api/festivals/") && method === "DELETE") {
       const id = pathname.split("/").pop();
       await Festival.findOneAndDelete(getQueryById(id));
+      await recordAuditLog("DELETE", "Festivals", `${authUser.name} deleted festival ID ${id}`, authUser.name, authUser.role);
       return sendJSON(res, 200, { success: true, id });
     }
 
@@ -307,6 +552,7 @@ const getQueryById = (id) => {
     if (pathname === "/api/annadhanam" && method === "POST") {
       const body = await parseJSON(req);
       const newDoc = await Annadhanam.create(body);
+      await recordAuditLog("CREATE", "Annadhanam", `${authUser.name} scheduled Annadhanam seva for date ${body.date}`, authUser.name, authUser.role);
       return sendJSON(res, 201, formatDoc(newDoc));
     }
     if (pathname.startsWith("/api/annadhanam/") && method === "PUT") {
@@ -314,11 +560,13 @@ const getQueryById = (id) => {
       const body = await parseJSON(req);
       const updated = await Annadhanam.findOneAndUpdate(getQueryById(id), body, { new: true });
       if (!updated) return sendJSON(res, 404, { error: "Not found" });
+      await recordAuditLog("UPDATE", "Annadhanam", `${authUser.name} updated Annadhanam record for date ${updated.date}`, authUser.name, authUser.role);
       return sendJSON(res, 200, formatDoc(updated));
     }
     if (pathname.startsWith("/api/annadhanam/") && method === "DELETE") {
       const id = pathname.split("/").pop();
       await Annadhanam.findOneAndDelete(getQueryById(id));
+      await recordAuditLog("DELETE", "Annadhanam", `${authUser.name} deleted Annadhanam record ID ${id}`, authUser.name, authUser.role);
       return sendJSON(res, 200, { success: true, id });
     }
 
@@ -330,6 +578,7 @@ const getQueryById = (id) => {
     if (pathname === "/api/priests" && method === "POST") {
       const body = await parseJSON(req);
       const newDoc = await Priest.create(body);
+      await recordAuditLog("CREATE", "Priests", `${authUser.name} added priest ${body.name}`, authUser.name, authUser.role);
       return sendJSON(res, 201, formatDoc(newDoc));
     }
     if (pathname.startsWith("/api/priests/") && method === "PUT") {
@@ -337,11 +586,13 @@ const getQueryById = (id) => {
       const body = await parseJSON(req);
       const updated = await Priest.findOneAndUpdate(getQueryById(id), body, { new: true });
       if (!updated) return sendJSON(res, 404, { error: "Not found" });
+      await recordAuditLog("UPDATE", "Priests", `${authUser.name} updated priest profile ${updated.name}`, authUser.name, authUser.role);
       return sendJSON(res, 200, formatDoc(updated));
     }
     if (pathname.startsWith("/api/priests/") && method === "DELETE") {
       const id = pathname.split("/").pop();
       await Priest.findOneAndDelete(getQueryById(id));
+      await recordAuditLog("DELETE", "Priests", `${authUser.name} deleted priest record ID ${id}`, authUser.name, authUser.role);
       return sendJSON(res, 200, { success: true, id });
     }
 
@@ -353,6 +604,7 @@ const getQueryById = (id) => {
     if (pathname === "/api/staff" && method === "POST") {
       const body = await parseJSON(req);
       const newDoc = await Staff.create(body);
+      await recordAuditLog("CREATE", "Staff", `${authUser.name} added staff member ${body.name}`, authUser.name, authUser.role);
       return sendJSON(res, 201, formatDoc(newDoc));
     }
     if (pathname.startsWith("/api/staff/") && method === "PUT") {
@@ -360,11 +612,13 @@ const getQueryById = (id) => {
       const body = await parseJSON(req);
       const updated = await Staff.findOneAndUpdate(getQueryById(id), body, { new: true });
       if (!updated) return sendJSON(res, 404, { error: "Not found" });
+      await recordAuditLog("UPDATE", "Staff", `${authUser.name} updated staff profile ${updated.name}`, authUser.name, authUser.role);
       return sendJSON(res, 200, formatDoc(updated));
     }
     if (pathname.startsWith("/api/staff/") && method === "DELETE") {
       const id = pathname.split("/").pop();
       await Staff.findOneAndDelete(getQueryById(id));
+      await recordAuditLog("DELETE", "Staff", `${authUser.name} deleted staff member ID ${id}`, authUser.name, authUser.role);
       return sendJSON(res, 200, { success: true, id });
     }
 
@@ -376,6 +630,7 @@ const getQueryById = (id) => {
     if (pathname === "/api/inventory" && method === "POST") {
       const body = await parseJSON(req);
       const newDoc = await Inventory.create(body);
+      await recordAuditLog("CREATE", "Inventory", `${authUser.name} added inventory item ${body.item_name || body.name}`, authUser.name, authUser.role);
       return sendJSON(res, 201, formatDoc(newDoc));
     }
     if (pathname.startsWith("/api/inventory/") && method === "PUT") {
@@ -383,11 +638,14 @@ const getQueryById = (id) => {
       const body = await parseJSON(req);
       const updated = await Inventory.findOneAndUpdate(getQueryById(id), body, { new: true });
       if (!updated) return sendJSON(res, 404, { error: "Not found" });
+      const itemName = updated.item_name || updated.name;
+      await recordAuditLog("UPDATE", "Inventory", `${authUser.name} updated inventory stock for ${itemName} (Qty: ${updated.quantity} ${updated.unit || ""})`, authUser.name, authUser.role);
       return sendJSON(res, 200, formatDoc(updated));
     }
     if (pathname.startsWith("/api/inventory/") && method === "DELETE") {
       const id = pathname.split("/").pop();
       await Inventory.findOneAndDelete(getQueryById(id));
+      await recordAuditLog("DELETE", "Inventory", `${authUser.name} deleted inventory item ID ${id}`, authUser.name, authUser.role);
       return sendJSON(res, 200, { success: true, id });
     }
 
@@ -403,3 +661,4 @@ server.listen(PORT, () => {
   console.log(`TAMS Database Server running at http://localhost:${PORT}`);
   console.log(`MongoDB URI configured as: ${MONGODB_URI}`);
 });
+

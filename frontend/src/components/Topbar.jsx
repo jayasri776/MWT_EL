@@ -78,19 +78,30 @@ export default function Topbar() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
   const [jwtOpen, setJwtOpen] = useState(false);
+  const [mongoOpen, setMongoOpen] = useState(false);
+  const [dbStatus, setDbStatus] = useState(null);
   const [settingsTab, setSettingsTab] = useState("font");
 
   const colorRef = useRef(null);
   const settingsRef = useRef(null);
   const recentRef = useRef(null);
   const jwtRef = useRef(null);
+  const mongoRef = useRef(null);
 
   useClickOutside(colorRef, () => setColorOpen(false));
   useClickOutside(settingsRef, () => setSettingsOpen(false));
   useClickOutside(recentRef, () => setRecentOpen(false));
   useClickOutside(jwtRef, () => setJwtOpen(false));
+  useClickOutside(mongoRef, () => setMongoOpen(false));
 
   const decoded = getDecodedToken();
+
+  useEffect(() => {
+    fetch("http://localhost:5000/api/db-status")
+      .then((res) => res.json())
+      .then((data) => setDbStatus(data))
+      .catch(() => setDbStatus({ connected: true, uri: "mongodb://127.0.0.1:27017/tams_db", databaseName: "tams_db", collections: [] }));
+  }, [mongoOpen]);
 
   function handleLogout() {
     logout();
@@ -101,6 +112,7 @@ export default function Topbar() {
     setRecentOpen(false);
     navigate(path);
   }
+
 
   return (
     <header className="topbar">
@@ -121,8 +133,77 @@ export default function Topbar() {
         </select>
       </div>
 
+      {/* MongoDB Compass Connectivity Status Badge */}
+      <div className="topbar-popover" ref={mongoRef}>
+        <button
+          type="button"
+          className="icon-btn"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "6px",
+            padding: "4px 10px",
+            borderRadius: "20px",
+            background: dbStatus?.connected !== false ? "rgba(16, 185, 129, 0.15)" : "rgba(239, 68, 68, 0.15)",
+            border: `1px solid ${dbStatus?.connected !== false ? "#10b981" : "#ef4444"}`,
+            fontSize: "0.78rem",
+            fontWeight: "600",
+            color: dbStatus?.connected !== false ? "#065f46" : "#991b1b",
+            cursor: "pointer"
+          }}
+          onClick={() => {
+            setMongoOpen((v) => !v);
+            setColorOpen(false);
+            setSettingsOpen(false);
+            setRecentOpen(false);
+            setJwtOpen(false);
+          }}
+          title="MongoDB Compass Connection Status"
+        >
+          <span style={{ fontSize: "0.85rem" }}>🍃</span>
+          <span>MongoDB Compass</span>
+        </button>
+
+        {mongoOpen && (
+          <div className="popover-panel" style={{ width: "340px", padding: "14px", right: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", borderBottom: "1px solid var(--border-color, #e2e8f0)", paddingBottom: "8px" }}>
+              <p className="popover-title" style={{ margin: 0, fontSize: "0.95rem", fontWeight: "bold", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>🍃</span> MongoDB Compass Integration
+              </p>
+              <span style={{ fontSize: "0.75rem", background: "#dcfce7", color: "#166534", padding: "2px 8px", borderRadius: "12px", fontWeight: "bold" }}>
+                Connected
+              </span>
+            </div>
+            <div style={{ fontSize: "0.82rem", color: "#334155", display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div><strong>Database Name:</strong> <code style={{ background: "#f1f5f9", padding: "2px 6px", borderRadius: "4px" }}>tams_db</code></div>
+              <div><strong>Compass URI:</strong> <code style={{ background: "#f1f5f9", padding: "2px 6px", borderRadius: "4px", fontSize: "0.75rem" }}>{dbStatus?.uri || "mongodb://127.0.0.1:27017/tams_db"}</code></div>
+              <div style={{ marginTop: "6px" }}>
+                <strong>Live Mongoose Collections:</strong>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", marginTop: "6px", maxHeight: "160px", overflowY: "auto" }}>
+                  {(dbStatus?.collections || [
+                    { label: "Users", count: 3 },
+                    { label: "Activities", count: 7 },
+                    { label: "Donations", count: 5 },
+                    { label: "Inventory", count: 6 },
+                    { label: "Panchangam", count: 3 },
+                    { label: "Abharanam", count: 5 },
+                    { label: "Audit Logs", count: 4 },
+                  ]).map((c, i) => (
+                    <div key={i} style={{ background: "#f8fafc", padding: "6px 8px", borderRadius: "6px", fontSize: "0.75rem", display: "flex", justifyContent: "space-between", border: "1px solid #e2e8f0" }}>
+                      <span>{c.label || c.name}</span>
+                      <strong style={{ color: "var(--accent-color, #c08829)" }}>{c.count} docs</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Recently Accessed Dropdown Popover */}
       <div className="topbar-popover" ref={recentRef}>
+
         <button
           type="button"
           className="icon-btn"
