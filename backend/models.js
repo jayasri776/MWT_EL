@@ -172,64 +172,6 @@ const panchangamSchema = new mongoose.Schema(
   options
 );
 
-// Sacred Ornaments & Jewelry (Abharanam) Schema
-const abharanamSchema = new mongoose.Schema(
-  {
-    item_code: { type: String, required: true, unique: true },
-    name: { type: String, required: true },
-    deity: { type: String, required: true },
-    category: { type: String, required: true }, // Crown (Kireedam), Lance (Vel), Necklace (Haaram), Armlet, Kavacham, etc.
-    metal_type: { type: String, required: true }, // 22K Gold, 24K Gold, 925 Sterling Silver, Platinum
-    gross_weight_grams: { type: Number, required: true, default: 0 },
-    net_weight_grams: { type: Number, required: true, default: 0 },
-    stone_weight_carats: { type: Number, default: 0 },
-    hallmark_cert: { type: String, default: "BIS-HM-PENDING" },
-    estimated_value_inr: { type: Number, default: 0 },
-    insurance_policy: { type: String, default: "N/A" },
-    insurance_expiry: { type: String },
-    vault_location: { type: String, default: "Main Vault Locker 01" },
-    status: { type: String, default: "In Vault" }, // In Vault, Adorning Deity, Under Maintenance, In Transit
-    photo_url: { type: String },
-    last_inspection_date: { type: String },
-    notes: { type: String },
-  },
-  options
-);
-
-// Vault Access & Alankaram Movement Log Schema
-const abharanamMovementSchema = new mongoose.Schema(
-  {
-    abharanam_id: { type: String, required: true },
-    item_code: { type: String, required: true },
-    abharanam_name: { type: String, required: true },
-    action: { type: String, required: true }, // Vault Check Out (Issue), Vault Check In (Return), Maintenance
-    timestamp: { type: String, required: true },
-    issued_to_priest: { type: String, required: true },
-    authorized_by: { type: String, required: true },
-    deity_adorned: { type: String },
-    purpose: { type: String, default: "Daily Alankaram" },
-    security_witness: { type: String },
-    condition: { type: String, default: "Excellent / Intact" },
-    status: { type: String, default: "Completed" },
-    notes: { type: String },
-  },
-  options
-);
-
-// Audit Log Schema
-const auditLogSchema = new mongoose.Schema(
-  {
-    timestamp: { type: String, required: true },
-    action: { type: String, required: true }, // CREATE, UPDATE, DELETE, LOGIN, VAULT_CHECKOUT, VAULT_CHECKIN
-    module: { type: String, required: true }, // Inventory, Abharanam, Donations, Panchangam, Activities, Festivals, Staff, Priests, System
-    details: { type: String, required: true },
-    performed_by: { type: String, required: true },
-    user_role: { type: String, default: "Administrator" },
-    ip: { type: String, default: "127.0.0.1" },
-  },
-  options
-);
-
 export const User = mongoose.model("User", userSchema);
 export const Activity = mongoose.model("Activity", activitySchema);
 export const Donation = mongoose.model("Donation", donationSchema);
@@ -241,7 +183,5 @@ export const Festival = mongoose.model("Festival", festivalSchema);
 export const Annadhanam = mongoose.model("Annadhanam", annadhanamSchema);
 export const TempleDetail = mongoose.model("TempleDetail", templeDetailSchema);
 export const Panchangam = mongoose.model("Panchangam", panchangamSchema);
-export const Abharanam = mongoose.model("Abharanam", abharanamSchema);
-export const AbharanamMovement = mongoose.model("AbharanamMovement", abharanamMovementSchema);
-export const AuditLog = mongoose.model("AuditLog", auditLogSchema);
+
 

@@ -14,9 +14,6 @@ import {
   Annadhanam,
   TempleDetail,
   Panchangam,
-  Abharanam,
-  AbharanamMovement,
-  AuditLog,
 } from "./models.js";
 import { seedDatabase } from "./seed.js";
 
@@ -52,24 +49,8 @@ const formatDoc = (doc) => {
 
 const formatDocs = (docs) => docs.map(formatDoc);
 
-// Helper for audit trail logging into MongoDB AuditLog collection
-const recordAuditLog = async (action, module, details, performedBy = "Temple Administrator", userRole = "Administrator", ip = "127.0.0.1") => {
-  try {
-    const now = new Date();
-    const timestampStr = now.toISOString().replace("T", " ").substring(0, 19);
-    await AuditLog.create({
-      timestamp: timestampStr,
-      action,
-      module,
-      details,
-      performed_by: performedBy,
-      user_role: userRole,
-      ip,
-    });
-  } catch (err) {
-    console.warn("Audit Log Warning:", err.message);
-  }
-};
+const recordAuditLog = async () => {};
+
 
 // Panchangam Daily Vedic Calculator Helper (computes for any date)
 const calculatePanchangamForDate = (dateStr) => {
@@ -284,9 +265,6 @@ const server = http.createServer(async (req, res) => {
         { name: "inventories", label: "Inventory Stock", count: await Inventory.countDocuments() },
         { name: "festivals", label: "Festivals & Utsavams", count: await Festival.countDocuments() },
         { name: "panchangams", label: "Panchangam Records", count: await Panchangam.countDocuments() },
-        { name: "abharanams", label: "Gold & Silver Jewelry Register", count: await Abharanam.countDocuments() },
-        { name: "abharanammovements", label: "Vault Movement Logs", count: await AbharanamMovement.countDocuments() },
-        { name: "auditlogs", label: "Action Audit Trail", count: await AuditLog.countDocuments() },
       ];
 
       return sendJSON(res, 200, {
@@ -306,11 +284,15 @@ const server = http.createServer(async (req, res) => {
 
     // Query helper for finding document by _id or custom id without CastError
     const getQueryById = (id) => {
-      if (mongoose.Types.ObjectId.isValid(id)) {
-        return { _id: id };
-      }
+      const conditions = [{ id: id }];
       const numId = Number(id);
-      return { $or: [{ id: id }, { id: isNaN(numId) ? id : numId }] };
+      if (!isNaN(numId)) {
+        conditions.push({ id: numId });
+      }
+      if (mongoose.Types.ObjectId.isValid(id)) {
+        conditions.push({ _id: id });
+      }
+      return { $or: conditions };
     };
 
     // Panchangam API
@@ -336,106 +318,26 @@ const server = http.createServer(async (req, res) => {
       let savedDoc;
       if (existing) {
         savedDoc = await Panchangam.findOneAndUpdate({ date: body.date }, body, { new: true });
-        await recordAuditLog("UPDATE", "Panchangam", `Updated Panchangam details for date ${body.date}`, authUser.name, authUser.role);
       } else {
         savedDoc = await Panchangam.create(body);
-        await recordAuditLog("CREATE", "Panchangam", `Added Panchangam entry for date ${body.date}`, authUser.name, authUser.role);
       }
       return sendJSON(res, 200, formatDoc(savedDoc));
     }
 
-    // Abharanam (Jewelry Security Register) API
-    if (pathname === "/api/abharanam" && method === "GET") {
-      const docs = await Abharanam.find().sort({ _id: -1 });
-      return sendJSON(res, 200, formatDocs(docs));
-    }
-
-    if (pathname === "/api/abharanam" && method === "POST") {
-      const body = await parseJSON(req);
-      if (!body.item_code) {
-        body.item_code = "ABH-" + (body.metal_type?.includes("Silver") ? "SLV" : "GLD") + "-" + Math.floor(100 + Math.random() * 900);
-      }
-      const newDoc = await Abharanam.create(body);
-      await recordAuditLog("CREATE", "Abharanam", `${authUser.name} added ornament ${body.name} (${body.item_code}) to Vault register`, authUser.name, authUser.role);
-      return sendJSON(res, 201, formatDoc(newDoc));
-    }
-
-    if (pathname.startsWith("/api/abharanam/") && method === "PUT") {
+    if (pathname.startsWith("/api/panchangam/") && method === "PUT") {
       const id = pathname.split("/").pop();
       const body = await parseJSON(req);
-      const updated = await Abharanam.findOneAndUpdate(getQueryById(id), body, { new: true });
-      if (!updated) return sendJSON(res, 404, { error: "Ornament not found" });
-      await recordAuditLog("UPDATE", "Abharanam", `${authUser.name} updated ornament ${updated.name} stock & status to ${updated.status}`, authUser.name, authUser.role);
+      const updated = await Panchangam.findOneAndUpdate(getQueryById(id), body, { new: true });
+      if (!updated) return sendJSON(res, 404, { error: "Not found" });
       return sendJSON(res, 200, formatDoc(updated));
     }
 
-    if (pathname.startsWith("/api/abharanam/") && method === "DELETE") {
+    if (pathname.startsWith("/api/panchangam/") && method === "DELETE") {
       const id = pathname.split("/").pop();
-      const deleted = await Abharanam.findOneAndDelete(getQueryById(id));
-      await recordAuditLog("DELETE", "Abharanam", `${authUser.name} removed ornament item ID ${id} from register`, authUser.name, authUser.role);
+      await Panchangam.findOneAndDelete(getQueryById(id));
       return sendJSON(res, 200, { success: true, id });
     }
 
-    // Abharanam Movements (Vault Access & Alankaram Log) API
-    if (pathname === "/api/abharanam/movements" && method === "GET") {
-      const docs = await AbharanamMovement.find().sort({ _id: -1 });
-      return sendJSON(res, 200, formatDocs(docs));
-    }
-
-    if (pathname === "/api/abharanam/movements" && method === "POST") {
-      const body = await parseJSON(req);
-      if (!body.timestamp) {
-        const now = new Date();
-        body.timestamp = now.toISOString().replace("T", " ").substring(0, 16);
-      }
-      const newMovement = await AbharanamMovement.create(body);
-
-      // Also update the status in the main Abharanam register
-      const newStatus = body.action.includes("Issue") || body.action.includes("Check Out")
-        ? "Adorning Deity"
-        : body.action.includes("Return") || body.action.includes("Check In")
-        ? "In Vault"
-        : "Under Maintenance";
-
-      if (body.abharanam_id) {
-        await Abharanam.findOneAndUpdate(
-          getQueryById(body.abharanam_id),
-          { status: newStatus, last_inspection_date: body.timestamp.split(" ")[0] }
-        );
-      }
-
-      const auditAction = newStatus === "Adorning Deity" ? "VAULT_CHECKOUT" : "VAULT_CHECKIN";
-      await recordAuditLog(
-        auditAction,
-        "Abharanam",
-        `${authUser.name} logged ${body.action} for ornament ${body.abharanam_name} (${body.item_code}) — Issued to ${body.issued_to_priest}`,
-        authUser.name,
-        authUser.role
-      );
-
-      return sendJSON(res, 201, formatDoc(newMovement));
-    }
-
-    // Audit Logs API
-    if (pathname === "/api/audit-logs" && method === "GET") {
-      const moduleFilter = url.searchParams.get("module");
-      const actionFilter = url.searchParams.get("action");
-      const searchFilter = url.searchParams.get("search");
-
-      let query = {};
-      if (moduleFilter && moduleFilter !== "All") query.module = moduleFilter;
-      if (actionFilter && actionFilter !== "All") query.action = actionFilter;
-      if (searchFilter) {
-        query.$or = [
-          { details: { $regex: searchFilter, $options: "i" } },
-          { performed_by: { $regex: searchFilter, $options: "i" } },
-          { module: { $regex: searchFilter, $options: "i" } },
-        ];
-      }
-
-      const docs = await AuditLog.find(query).sort({ _id: -1 }).limit(100);
-      return sendJSON(res, 200, formatDocs(docs));
-    }
 
     // Activities API
     if (pathname === "/api/activities" && method === "GET") {

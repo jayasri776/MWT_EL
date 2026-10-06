@@ -110,18 +110,6 @@ const NAV_GROUPS = [
     labelKey: "navResources",
     items: [
       {
-        page: "abharanam",
-        labelKey: "navAbharanam",
-        badge: "Vault",
-        icon: (
-          <svg className="ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <path d="M10 2L13 6H7L10 2Z" />
-            <path d="M3 7H17L19 12H1L3 7Z" />
-            <rect x="3" y="12" width="14" height="6" rx="1" />
-          </svg>
-        ),
-      },
-      {
         page: "inventory",
         labelKey: "navInventory",
         badge: "3",
@@ -141,16 +129,6 @@ const NAV_GROUPS = [
             <path d="M5 2.5H12L16 6.5V17.5H5V2.5Z" />
             <path d="M12 2.5V6.5H16" />
             <path d="M7.5 11H13.5M7.5 14H13.5" />
-          </svg>
-        ),
-      },
-      {
-        page: "audit",
-        labelKey: "navAudit",
-        icon: (
-          <svg className="ic" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6">
-            <path d="M10 2L17 5V10C17 14.5 14 17.5 10 19C6 17.5 3 14.5 3 10V5L10 2Z" />
-            <path d="M7.5 9.5L9.5 11.5L13 7.5" />
           </svg>
         ),
       },

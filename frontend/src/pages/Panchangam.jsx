@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useLanguage } from "../context/LanguageContext";
 import { useAuth } from "../context/AuthContext";
 import { useToast } from "../context/ToastContext";
+import { db } from "../services/db";
 
 export default function Panchangam() {
   const { tr } = useLanguage();
@@ -32,22 +33,19 @@ export default function Panchangam() {
     notes: "Auspicious for sacred vows, homam, and Annadhanam seva",
   });
 
-  const fetchPanchangam = (dateStr) => {
+  const fetchPanchangam = async (dateStr) => {
     setLoading(true);
-    const token = localStorage.getItem("tams_jwt_token");
-    fetch(`http://localhost:5000/api/panchangam/date/${dateStr}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => res.json())
-      .then((data) => {
+    try {
+      const data = await db.getPanchangamByDate(dateStr);
+      if (data) {
         setPanchangamData(data);
         setFormData({ ...data, date: dateStr });
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Error fetching Panchangam:", err);
-        setLoading(false);
-      });
+      }
+    } catch (err) {
+      console.error("Error fetching Panchangam:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -61,26 +59,20 @@ export default function Panchangam() {
     setSelectedDate(newStr);
   };
 
-  const handleSavePanchangam = (e) => {
+  const handleSavePanchangam = async (e) => {
     e.preventDefault();
-    const token = localStorage.getItem("tams_jwt_token");
-    fetch("http://localhost:5000/api/panchangam", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(formData),
-    })
-      .then((res) => res.json())
-      .then((saved) => {
+    try {
+      const saved = await db.savePanchangam(formData);
+      if (saved) {
         showToast("Panchangam details updated successfully in MongoDB!", "success");
         setPanchangamData(saved);
         setShowEditModal(false);
-      })
-      .catch(() => {
+      } else {
         showToast("Failed to update Panchangam record.", "error");
-      });
+      }
+    } catch (err) {
+      showToast("Failed to update Panchangam record.", "error");
+    }
   };
 
   const formattedDateHeader = new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {

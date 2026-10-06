@@ -18,8 +18,6 @@ import Donations from "./pages/Donations";
 import Inventory from "./pages/Inventory";
 import Reports from "./pages/Reports";
 import Panchangam from "./pages/Panchangam";
-import Abharanam from "./pages/Abharanam";
-import AuditLogs from "./pages/AuditLogs";
 import { LanguageProvider } from "./context/LanguageContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SettingsProvider } from "./context/SettingsContext";
@@ -121,7 +119,6 @@ function RecentRouteTracker() {
     const routeMap = {
       "/dashboard": { title: "Dashboard Overview", icon: "📊", category: "Navigation" },
       "/panchangam": { title: "Daily Panchangam & Hindu Calendar", icon: "🕉️", category: "Sacred" },
-      "/abharanam": { title: "Sacred Ornaments & Vault Register", icon: "👑", category: "Vault" },
       "/activities": { title: "Temple Rituals & Activities", icon: "🔱", category: "Activity" },
       "/festivals": { title: "Festivals & Utsavams", icon: "🚩", category: "Festival" },
       "/annadhanam": { title: "Annadhanam Seva Record", icon: "🍛", category: "Seva" },
@@ -130,7 +127,6 @@ function RecentRouteTracker() {
       "/donations": { title: "Devotee Donations & Receipts", icon: "🪙", category: "Finance" },
       "/inventory": { title: "Pooja & Kitchen Inventory", icon: "📦", category: "Inventory" },
       "/reports": { title: "Temple Analytics & Reports", icon: "📈", category: "Analytics" },
-      "/audit": { title: "Audit Trail & Security RBAC", icon: "🛡️", category: "Security" },
     };
 
     const current = routeMap[location.pathname];
@@ -173,7 +169,6 @@ export default function App() {
                         />
                         <Route path="/dashboard" element={<RequireRole page="dashboard"><Dashboard /></RequireRole>} />
                         <Route path="/panchangam" element={<RequireRole page="panchangam"><Panchangam /></RequireRole>} />
-                        <Route path="/abharanam" element={<RequireRole page="abharanam"><Abharanam /></RequireRole>} />
                         <Route path="/activities" element={<RequireRole page="activities"><Activities /></RequireRole>} />
                         <Route path="/festivals" element={<RequireRole page="festivals"><Festivals /></RequireRole>} />
                         <Route path="/annadhanam" element={<RequireRole page="annadhanam"><Annadhanam /></RequireRole>} />
@@ -182,7 +177,6 @@ export default function App() {
                         <Route path="/donations" element={<RequireRole page="donations"><Donations /></RequireRole>} />
                         <Route path="/inventory" element={<RequireRole page="inventory"><Inventory /></RequireRole>} />
                         <Route path="/reports" element={<RequireRole page="reports"><Reports /></RequireRole>} />
-                        <Route path="/audit" element={<RequireRole page="audit"><AuditLogs /></RequireRole>} />
                         <Route
                           path="*"
                           element={<RoleDefaultRedirect />}

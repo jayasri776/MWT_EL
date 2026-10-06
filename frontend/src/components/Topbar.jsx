@@ -186,8 +186,6 @@ export default function Topbar() {
                     { label: "Donations", count: 5 },
                     { label: "Inventory", count: 6 },
                     { label: "Panchangam", count: 3 },
-                    { label: "Abharanam", count: 5 },
-                    { label: "Audit Logs", count: 4 },
                   ]).map((c, i) => (
                     <div key={i} style={{ background: "#f8fafc", padding: "6px 8px", borderRadius: "6px", fontSize: "0.75rem", display: "flex", justifyContent: "space-between", border: "1px solid #e2e8f0" }}>
                       <span>{c.label || c.name}</span>

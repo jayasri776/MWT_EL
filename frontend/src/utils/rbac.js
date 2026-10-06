@@ -1,8 +1,8 @@
 export const ALLOWED_PAGES_BY_ROLE = {
-  administrator: ["dashboard", "panchangam", "abharanam", "activities", "festivals", "annadhanam", "priests", "staff", "donations", "inventory", "reports", "audit"],
-  admin: ["dashboard", "panchangam", "abharanam", "activities", "festivals", "annadhanam", "priests", "staff", "donations", "inventory", "reports", "audit"],
-  priest: ["panchangam", "abharanam", "activities", "festivals"],
-  treasurer: ["donations", "reports", "inventory", "abharanam"],
+  administrator: ["dashboard", "panchangam", "activities", "festivals", "annadhanam", "priests", "staff", "donations", "inventory", "reports"],
+  admin: ["dashboard", "panchangam", "activities", "festivals", "annadhanam", "priests", "staff", "donations", "inventory", "reports"],
+  priest: ["panchangam", "activities", "festivals"],
+  treasurer: ["donations", "reports", "inventory"],
   staff: ["dashboard", "panchangam", "activities", "inventory"],
 };
 
