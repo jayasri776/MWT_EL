@@ -173,6 +173,15 @@ const server = http.createServer(async (req, res) => {
   const method = req.method;
 
   try {
+    // Health check & root route for deployment platforms like Vercel
+    if ((pathname === "/" || pathname === "/api" || pathname === "/api/health") && method === "GET") {
+      return sendJSON(res, 200, {
+        status: "online",
+        message: "TAMS Backend API Server is running!",
+        timestamp: new Date().toISOString()
+      });
+    }
+
     // Auth login
     if (pathname === "/api/auth/login" && method === "POST") {
       const { username, password } = await parseJSON(req);
@@ -559,8 +568,13 @@ const server = http.createServer(async (req, res) => {
 });
 
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`TAMS Database Server running at http://localhost:${PORT}`);
-  console.log(`MongoDB URI configured as: ${MONGODB_URI}`);
-});
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  server.listen(PORT, () => {
+    console.log(`TAMS Database Server running at http://localhost:${PORT}`);
+    console.log(`MongoDB URI configured as: ${MONGODB_URI}`);
+  });
+}
+
+export default server;
+
 
